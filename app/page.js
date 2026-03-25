@@ -93,7 +93,7 @@ export default function Home() {
                     const text = await csvRes.text();
                     const words = parseCSV(text);
                     if (words.length > 0) {
-                        addOrUpdateTask(topic.name, words, false);
+                        addOrUpdateTask(topic.name, words, false, true);
                     }
                 } catch (e) {
                     console.error("Failed to load topic file:", topic.filename);
@@ -156,9 +156,12 @@ export default function Home() {
                 <div class="progress-mini">
                     <div class="progress-bar-fill" style="width: ${percent}%"></div>
                 </div>
+                ${!task.isSystem ? `
                 <button class="btn btn-danger btn-ghost delete-btn" onclick="window.deleteTask('${task.id}', event)">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                </button>
+                </button>` : `
+                <div class="delete-btn" style="opacity: 0.5; cursor: not-allowed; font-size: 10px; color: var(--accent-green)">PINNED</div>
+                `}
             `;
             listEl.appendChild(item);
         });
@@ -180,6 +183,11 @@ export default function Home() {
 
     function deleteTask(id, e) {
         if (e) e.stopPropagation();
+        const task = state.tasks.find(t => t.id === id);
+        if (task && task.isSystem) {
+            showToast("Đây là bài học hệ thống, không thể xóa!", 'error');
+            return;
+        }
         if (confirm("Xóa Task này?")) {
             state.tasks = state.tasks.filter(t => t.id !== id);
             saveData();
@@ -225,7 +233,7 @@ export default function Home() {
         }).filter(w => w !== null);
     }
 
-    function addOrUpdateTask(name, newWords, autoSelect = true) {
+    function addOrUpdateTask(name, newWords, autoSelect = true, isSystem = false) {
         const CHUNK_SIZE = 15;
         let relatedTasks = state.tasks.filter(t => t.name.toLowerCase() === name.toLowerCase() || t.name.toLowerCase().startsWith(name.toLowerCase() + " - part"));
         let allWords = [...newWords];
@@ -247,7 +255,7 @@ export default function Home() {
             const taskLearned = allLearned.filter(en => chunk.some(w => w.en.toLowerCase() === en.toLowerCase()));
             const newId = 'task_' + Date.now() + '_' + i;
             if (!firstId) firstId = newId;
-            state.tasks.push({ id: newId, name: partName, words: chunk, learned: taskLearned });
+            state.tasks.push({ id: newId, name: partName, words: chunk, learned: taskLearned, isSystem: isSystem });
         }
         saveData();
         renderTaskList();
@@ -361,7 +369,10 @@ export default function Home() {
             const p = Math.round(t.learned.length / t.words.length * 100);
             const card = document.createElement('div');
             card.className = 'dashboard-card';
-            card.innerHTML = `<h3>${t.name}</h3><div class="task-meta"><span>${t.learned.length}/${t.words.length} từ</span><span>${p}%</span></div><div class="progress-mini"><div class="progress-bar-fill" style="width: ${p}%"></div></div><div style="display:flex;gap:10px;margin-top:auto"><button class="btn btn-primary" style="flex:1" onclick="window.selectTask('${t.id}')">Ôn tập</button><button class="btn btn-secondary" onclick="window.deleteTask('${t.id}', event)">Xóa</button></div>`;
+            card.innerHTML = `<h3>${t.name}</h3><div class="task-meta"><span>${t.learned.length}/${t.words.length} từ</span><span>${p}%</span></div><div class="progress-mini"><div class="progress-bar-fill" style="width: ${p}%"></div></div><div style="display:flex;gap:10px;margin-top:auto">
+                <button class="btn btn-primary" style="flex:1" onclick="window.selectTask('${t.id}')">Ôn tập</button>
+                ${!t.isSystem ? `<button class="btn btn-secondary" onclick="window.deleteTask('${t.id}', event)">Xóa</button>` : `<span style="font-size: 10px; color: var(--accent-green); display: flex; align-items: center">Hệ thống</span>`}
+            </div>`;
             grid.appendChild(card);
         });
         renderPagination(document.getElementById('dashboard-pagination'), page, total, renderDashboard);
