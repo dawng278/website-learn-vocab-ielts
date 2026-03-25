@@ -83,27 +83,21 @@ export default function Home() {
             const topics = data.topics || [];
             
             if (topics.length === 0) {
-                showToast("Không tìm thấy kho chủ đề mẫu!", 'error');
+                // If DB empty, fallback to local fetch if possible, but user wants DB
+                showToast("Kho dữ liệu MongoDB đang trống!", 'info');
                 return;
             }
 
             for (const topic of topics) {
-                try {
-                    const csvRes = await fetch(`/vocab/${topic.filename}`);
-                    const text = await csvRes.text();
-                    const words = parseCSV(text);
-                    if (words.length > 0) {
-                        addOrUpdateTask(topic.name, words, false, true);
-                    }
-                } catch (e) {
-                    console.error("Failed to load topic file:", topic.filename);
+                if (topic.words && topic.words.length > 0) {
+                    addOrUpdateTask(topic.name, topic.words, false, true);
                 }
             }
-            showToast(`Đã tải xong ${topics.length} chủ đề IELTS!`, 'success');
+            showToast(`Đồng bộ thành công ${topics.length} chủ đề từ MongoDB!`, 'success');
             renderTaskList();
         } catch (error) {
             console.error("API call failed:", error);
-            showToast("Lỗi kết nối Server!", 'error');
+            showToast("Lỗi kết nối CSDL MongoDB!", 'error');
         }
     }
 
