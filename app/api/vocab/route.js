@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import dbConnect from '../../../lib/db';
+// import dbConnect from '../../../lib/db';
 import topicsData from '../../../all_topics.json';
 
 export const dynamic = 'force-dynamic';
@@ -9,7 +9,8 @@ export async function GET() {
   let source = 'unknown';
 
   try {
-    // 1. Try to fetch from MongoDB
+    // 1. Try to fetch from MongoDB (Temporarily disabled for build fix)
+    /*
     if (process.env.NEXT_PHASE !== 'phase-production-build') {
         const client = await dbConnect();
         const db = client.db();
@@ -25,6 +26,7 @@ export async function GET() {
             source = 'mongodb';
         }
     }
+    */
   } catch (error) {
     console.error('⚠️ MongoDB Fetch Failed, falling back to local file:', error.message);
   }
