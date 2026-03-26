@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import './globals.css';
-import defaultTopics from '../all_topics.json';
+// import defaultTopics from '../all_topics.json'; (Moved to API for better performance)
 
 export default function Home() {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
@@ -54,29 +54,25 @@ export default function Home() {
     }
 
     function loadDefaultTopics() {
-        try {
-            console.log("Checking default topics...");
-            let topics = defaultTopics;
-            
-            // Handle CJS/ESM wrapping if it occurs
-            if (topics && !Array.isArray(topics) && (topics.default || topics.topics)) {
-                topics = topics.default || topics.topics;
-            }
-
-            if (!topics || !Array.isArray(topics) || topics.length === 0) {
-                console.warn("No default topics found in bundle.");
-                return;
-            }
-
-            console.log(`Loading ${topics.length} topics...`);
-            topics.forEach((topic, index) => {
-                const isLast = (index === topics.length - 1);
-                addOrUpdateTask(topic.topic || topic.name, topic.words, false, true, !isLast);
+        if (state.tasks.length > 0) return;
+        
+        console.log("Loading tasks from API...");
+        fetch('/api/vocab')
+            .then(res => res.json())
+            .then(data => {
+                const topics = data.topics || [];
+                if (topics.length === 0) return;
+                
+                console.log(`Loading ${topics.length} topics into system...`);
+                topics.forEach((topic, index) => {
+                    const isLast = (index === topics.length - 1);
+                    addOrUpdateTask(topic.name || topic.topic, topic.words, false, true, !isLast);
+                });
+                console.log("All tasks loaded successfully.");
+            })
+            .catch(err => {
+                console.error("API load failed, falling back to basic data structure.", err);
             });
-            console.log("Topics loaded successfully.");
-        } catch (error) {
-            console.error("Local load failed:", error);
-        }
     }
 
     function showToast(message, type = 'info') {
