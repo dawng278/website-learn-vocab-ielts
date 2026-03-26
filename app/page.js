@@ -8,6 +8,7 @@ export default function Home() {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
+    console.log("🚀 App Client Initializing (v1.1)...");
     let state = {
         tasks: [],
         currentTaskId: null,
@@ -528,7 +529,7 @@ export default function Home() {
         <div className="sidebar-header">
             <div className="logo">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-                <span>Mastery</span>
+                <span>Mastery v1.1</span>
             </div>
             <div className="action-btns">
                 <button className="btn btn-primary" onClick={() => window.createNewTask()}>+ Task</button>
