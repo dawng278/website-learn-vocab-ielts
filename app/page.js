@@ -1,25 +1,27 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import './globals.css';
+import defaultTopics from '@/all_topics.json';
 
 export default function Home() {
+  const [isSidebarOpen, setSidebarOpen] = useState(false);
+
   useEffect(() => {
-    // === COPY OF THE ORIGINAL SCRIPT LOGIC ===
     let state = {
         tasks: [],
         currentTaskId: null,
-        view: 'empty', // empty, quiz, dashboard, topics, mode-selector, learn, stats
+        view: 'empty',
         dashboardPage: 1,
         topicsPage: 1,
         selectedTopic: null,
         flashcardIndex: 0,
-        history: {}, // { "YYYY-MM-DD": count }
+        history: {},
         quizSession: {
             currentWord: null,
             isCorrectionMode: false,
             correctionCount: 0,
-            history: [] // Dùng để chống lặp từ vừa xuất hiện
+            history: []
         }
     };
 
@@ -29,26 +31,6 @@ export default function Home() {
     };
 
     const STORAGE_KEY = 'vocab_mastery_data';
-
-    // Export functions to window so onclick works
-    window.loadDefaultTopics = loadDefaultTopics;
-    window.createNewTask = createNewTask;
-    window.handleImport = handleImport;
-    window.showTopics = showTopics;
-    window.showDashboard = showDashboard;
-    window.showStats = showStats;
-    window.exportData = exportData;
-    window.deleteTask = deleteTask;
-    window.selectTask = selectTask;
-    window.startMode = startMode;
-    window.flipCard = flipCard;
-    window.nextFlashcard = nextFlashcard;
-    window.prevFlashcard = prevFlashcard;
-    window.changeMonth = changeMonth;
-    window.resetProgress = resetProgress;
-    window.renderDashboard = renderDashboard;
-    window.renderTopics = renderTopics;
-    window.switchView = switchView;
 
     function init() {
         const saved = localStorage.getItem(STORAGE_KEY);
@@ -61,43 +43,25 @@ export default function Home() {
                 state.tasks = data.tasks || [];
                 state.history = data.history || {};
             }
-            
             state.tasks.forEach(t => {
                 if (!t.learned) t.learned = [];
                 if (!t.words) t.words = [];
             });
         }
         renderTaskList();
-
-        // Thêm tính năng tự động tải mặc định nếu chưa có gì
-        if (state.tasks.length === 0) {
-            console.log("Empty state detected. Initializing default topics...");
-            loadDefaultTopics();
-        }
+        loadDefaultTopics();
     }
 
-    async function loadDefaultTopics() {
+    function loadDefaultTopics() {
         try {
-            const res = await fetch('/api/vocab');
-            const data = await res.json();
-            const topics = data.topics || [];
-            
-            if (topics.length === 0) {
-                // If DB empty, fallback to local fetch if possible, but user wants DB
-                showToast("Kho dữ liệu MongoDB đang trống!", 'info');
-                return;
-            }
-
-            for (const topic of topics) {
-                if (topic.words && topic.words.length > 0) {
-                    addOrUpdateTask(topic.name, topic.words, false, true);
-                }
-            }
-            showToast(`Đồng bộ thành công ${topics.length} chủ đề từ MongoDB!`, 'success');
-            renderTaskList();
+            const topics = defaultTopics || [];
+            if (topics.length === 0) return;
+            topics.forEach((topic, index) => {
+                const isLast = (index === topics.length - 1);
+                addOrUpdateTask(topic.topic || topic.name, topic.words, false, true, !isLast);
+            });
         } catch (error) {
-            console.error("API call failed:", error);
-            showToast("Lỗi kết nối CSDL MongoDB!", 'error');
+            console.error("Local load failed:", error);
         }
     }
 
@@ -106,14 +70,11 @@ export default function Home() {
         if (!container) return;
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
-        
         let icon = 'ℹ️';
         if (type === 'success') icon = '✅';
         if (type === 'error') icon = '❌';
-
         toast.innerHTML = `<span>${icon}</span> <span>${message}</span>`;
         container.appendChild(toast);
-
         setTimeout(() => {
             toast.classList.add('fade-out');
             setTimeout(() => toast.remove(), 300);
@@ -131,16 +92,13 @@ export default function Home() {
         const listEl = document.getElementById('task-list');
         if (!listEl) return;
         listEl.innerHTML = '';
-
         state.tasks.forEach(task => {
             const total = task.words.length;
             const mastered = task.learned.length;
             const percent = total > 0 ? (mastered / total * 100) : 0;
-
             const item = document.createElement('div');
             item.className = `task-item ${state.currentTaskId === task.id ? 'active' : ''}`;
-            item.onclick = () => selectTask(task.id);
-            
+            item.onclick = () => window.selectTask(task.id);
             item.innerHTML = `
                 <div class="task-name">${task.name}</div>
                 <div class="task-meta">
@@ -196,14 +154,13 @@ export default function Home() {
     async function handleImport(input, type) {
         const file = input.files[0];
         if (!file) return;
-
         const reader = new FileReader();
         reader.onload = function(e) {
             if (type === 'json') {
                 try {
                     const jsonData = JSON.parse(e.target.result);
                     if (Array.isArray(jsonData)) {
-                        jsonData.forEach(item => addOrUpdateTask(item.name, item.words, true));
+                        jsonData.forEach(item => addOrUpdateTask(item.name || item.topic, item.words, true));
                         renderTaskList();
                         showToast("Import thành công!", 'success');
                     }
@@ -227,7 +184,7 @@ export default function Home() {
         }).filter(w => w !== null);
     }
 
-    function addOrUpdateTask(name, newWords, autoSelect = true, isSystem = false) {
+    function addOrUpdateTask(name, newWords, autoSelect = true, isSystem = false, skipSave = false) {
         const CHUNK_SIZE = 15;
         let relatedTasks = state.tasks.filter(t => t.name.toLowerCase() === name.toLowerCase() || t.name.toLowerCase().startsWith(name.toLowerCase() + " - part"));
         let allWords = [...newWords];
@@ -239,7 +196,6 @@ export default function Home() {
             });
             state.tasks = state.tasks.filter(t => !relatedTasks.includes(t));
         }
-
         const totalParts = Math.ceil(allWords.length / CHUNK_SIZE);
         let firstId = null;
         for (let i = 0; i < allWords.length; i += CHUNK_SIZE) {
@@ -251,17 +207,11 @@ export default function Home() {
             if (!firstId) firstId = newId;
             state.tasks.push({ id: newId, name: partName, words: chunk, learned: taskLearned, isSystem: isSystem });
         }
-        saveData();
-        renderTaskList();
-        if (autoSelect && firstId) selectTask(firstId);
-    }
-
-    function selectTask(id) {
-        state.currentTaskId = id;
-        const task = state.tasks.find(t => t.id === id);
-        document.getElementById('mode-task-title').innerText = task.name;
-        switchView('mode-selector');
-        renderTaskList();
+        if (!skipSave) {
+            saveData();
+            renderTaskList();
+            if (autoSelect && firstId) window.selectTask(firstId);
+        }
     }
 
     function switchView(viewName) {
@@ -271,15 +221,12 @@ export default function Home() {
             const el = document.getElementById(v);
             if (el) el.style.display = 'none';
         });
-
         const current = {
             'empty': 'empty-state', 'quiz': 'quiz-container', 'dashboard': 'dashboard-view',
             'topics': 'topics-view', 'mode-selector': 'mode-selector', 'learn': 'flashcard-view', 'stats': 'stats-view'
         }[viewName];
-        
         const target = document.getElementById(current);
         if (target) target.style.display = (viewName === 'dashboard' || viewName === 'topics' || viewName === 'stats' || viewName === 'learn' ? 'flex' : 'block');
-
         if (viewName === 'dashboard') renderDashboard(state.dashboardPage);
         if (viewName === 'topics') renderTopics(state.topicsPage);
         if (viewName === 'stats') renderStats();
@@ -354,9 +301,11 @@ export default function Home() {
     function renderDashboard(page = 1) {
         state.dashboardPage = page;
         const grid = document.getElementById('dashboard-grid');
-        const search = document.getElementById('dashboard-search').value.toLowerCase();
+        if (!grid) return;
+        const searchInput = document.getElementById('dashboard-search');
+        const search = searchInput ? searchInput.value.toLowerCase() : '';
         const filtered = state.tasks.filter(t => t.name.toLowerCase().includes(search));
-        const ITEMS = 15;
+        const ITEMS = 8;
         const total = Math.ceil(filtered.length / ITEMS);
         grid.innerHTML = '';
         filtered.slice((page-1)*ITEMS, page*ITEMS).forEach(t => {
@@ -375,6 +324,7 @@ export default function Home() {
     function renderTopics(page = 1) {
         state.topicsPage = page;
         const grid = document.getElementById('topics-grid');
+        if (!grid) return;
         const map = {};
         state.tasks.forEach(t => {
             const base = t.name.split(' - Part')[0].trim();
@@ -382,7 +332,7 @@ export default function Home() {
             map[base].count++; map[base].total += t.words.length; map[base].learned += t.learned.length;
         });
         const list = Object.values(map);
-        const ITEMS = 15;
+        const ITEMS = 8;
         const total = Math.ceil(list.length / ITEMS);
         grid.innerHTML = '';
         list.slice((page-1)*ITEMS, page*ITEMS).forEach(topic => {
@@ -412,13 +362,42 @@ export default function Home() {
     }
 
     function renderPagination(container, current, total, onClick) {
+        if (!container) return;
         container.innerHTML = '';
         if (total <= 1) return;
+
+        const range = [];
+        const delta = 1; // Number of neighbors to show
+
         for (let i = 1; i <= total; i++) {
+            if (i === 1 || i === total || (i >= current - delta && i <= current + delta)) {
+                range.push(i);
+            }
+        }
+
+        let last = null;
+        for (let i of range) {
+            if (last) {
+                if (i - last === 2) {
+                    const btn = document.createElement('button');
+                    btn.className = 'page-btn';
+                    btn.innerText = last + 1;
+                    btn.onclick = () => onClick(last + 1);
+                    container.appendChild(btn);
+                } else if (i - last > 2) {
+                    const dots = document.createElement('span');
+                    dots.innerText = '...';
+                    dots.style.padding = '0 5px';
+                    dots.style.color = 'var(--text-dim)';
+                    container.appendChild(dots);
+                }
+            }
             const btn = document.createElement('button');
             btn.className = `page-btn ${i === current ? 'active' : ''}`;
-            btn.innerText = i; btn.onclick = () => onClick(i);
+            btn.innerText = i; 
+            btn.onclick = () => onClick(i);
             container.appendChild(btn);
+            last = i;
         }
     }
 
@@ -465,7 +444,10 @@ export default function Home() {
 
     function updateCorrectionUI() {
         document.getElementById('correction-step').innerText = state.quizSession.correctionCount;
-        for (let i = 1; i <= 3; i++) document.getElementById(`dot-${i}`).className = `dot ${i <= state.quizSession.correctionCount ? 'filled' : ''}`;
+        for (let i = 1; i <= 3; i++) {
+            const dot = document.getElementById(`dot-${i}`);
+            if (dot) dot.className = `dot ${i <= state.quizSession.correctionCount ? 'filled' : ''}`;
+        }
     }
 
     function resetProgress() {
@@ -479,9 +461,36 @@ export default function Home() {
         const a = document.createElement('a'); a.href = url; a.download = 'vocab_data.json'; a.click();
     }
 
-    function showTopics() { switchView('topics'); }
-    function showDashboard() { switchView('dashboard'); }
-    function showStats() { switchView('stats'); }
+    // Window assignments
+    window.loadDefaultTopics = loadDefaultTopics;
+    window.createNewTask = createNewTask;
+    window.handleImport = handleImport;
+    window.exportData = exportData;
+    window.deleteTask = deleteTask;
+    window.startMode = startMode;
+    window.flipCard = flipCard;
+    window.nextFlashcard = nextFlashcard;
+    window.prevFlashcard = prevFlashcard;
+    window.changeMonth = changeMonth;
+    window.resetProgress = resetProgress;
+    window.renderDashboard = renderDashboard;
+    window.renderTopics = renderTopics;
+    window.switchView = switchView;
+
+    window.selectTask = (id) => {
+        state.currentTaskId = id;
+        const task = state.tasks.find(t => t.id === id);
+        if (task) {
+            document.getElementById('mode-task-title').innerText = task.name;
+            switchView('mode-selector');
+            renderTaskList();
+            if (window.innerWidth <= 768) document.getElementById('sidebar').classList.remove('active');
+        }
+    };
+
+    window.showTopics = () => { switchView('topics'); if (window.innerWidth <= 768) document.getElementById('sidebar').classList.remove('active'); };
+    window.showDashboard = () => { switchView('dashboard'); if (window.innerWidth <= 768) document.getElementById('sidebar').classList.remove('active'); };
+    window.showStats = () => { switchView('stats'); if (window.innerWidth <= 768) document.getElementById('sidebar').classList.remove('active'); };
 
     // Start
     init();
@@ -493,6 +502,10 @@ export default function Home() {
 
   return (
     <>
+      <button className="mobile-nav-toggle" onClick={() => document.getElementById('sidebar').classList.toggle('active')}>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+
       <aside id="sidebar">
         <div className="sidebar-header">
             <div className="logo">
@@ -509,10 +522,6 @@ export default function Home() {
         </div>
 
         <div className="sidebar-nav">
-            <button className="btn btn-secondary" style={{width:'100%', justifyContent: 'flex-start', marginBottom: '8px', color: 'var(--accent-green)'}} onClick={() => window.loadDefaultTopics()}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Tải Kho đề mẫu (33)
-            </button>
             <button className="btn btn-secondary" style={{width:'100%', justifyContent: 'flex-start', marginBottom: '8px'}} onClick={() => window.showTopics()}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
                 Chủ đề (Topics)
@@ -533,6 +542,7 @@ export default function Home() {
             <button className="btn btn-secondary" style={{width:'100%'}} onClick={() => window.exportData()}>Export Data</button>
         </div>
       </aside>
+      <div className="sidebar-overlay" onClick={() => document.getElementById('sidebar').classList.remove('active')}></div>
 
       <main id="main-content">
         <div id="empty-state" className="empty-state">
@@ -553,7 +563,7 @@ export default function Home() {
             </div>
 
             <div className="quiz-card" id="quiz-card">
-                <p id="label-prompt" style={{fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '1px'}}>Dịch sang tiếng Anh</p>
+                <p style={{fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '1px'}}>Dịch sang tiếng Anh</p>
                 <div className="vi-meaning" id="vi-word">...</div>
                 <div className="input-group">
                     <input type="text" id="vocab-input" className="vocab-input" autoComplete="off" placeholder="Gõ từ tại đây..." />
@@ -617,9 +627,9 @@ export default function Home() {
 
         <div id="dashboard-view">
             <div className="dashboard-header">
-                <div><h1>Bảng điều khiển</h1></div>
+                <div><h1>Tất cả Task</h1></div>
                 <div className="search-wrap">
-                    <input type="text" id="dashboard-search" placeholder="Tìm kiếm..." className="btn-secondary" style={{padding: '10px 20px', borderRadius: '100px', outline: 'none', width: '250px'}} onInput={() => window.renderDashboard(1)} />
+                    <input type="text" id="dashboard-search" placeholder="Tìm kiếm..." className="btn btn-secondary" style={{padding: '10px 20px', borderRadius: '100px', outline: 'none', width: '250px'}} onInput={() => window.renderDashboard(1)} />
                 </div>
             </div>
             <div className="task-grid" id="dashboard-grid"></div>
