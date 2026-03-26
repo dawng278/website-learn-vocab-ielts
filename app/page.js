@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import './globals.css';
-import defaultTopics from '@/all_topics.json';
+import defaultTopics from '../all_topics.json';
 
 export default function Home() {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
@@ -49,17 +49,30 @@ export default function Home() {
             });
         }
         renderTaskList();
-        loadDefaultTopics();
+        setTimeout(loadDefaultTopics, 100);
     }
 
     function loadDefaultTopics() {
         try {
-            const topics = defaultTopics || [];
-            if (topics.length === 0) return;
+            console.log("Checking default topics...");
+            let topics = defaultTopics;
+            
+            // Handle CJS/ESM wrapping if it occurs
+            if (topics && !Array.isArray(topics) && (topics.default || topics.topics)) {
+                topics = topics.default || topics.topics;
+            }
+
+            if (!topics || !Array.isArray(topics) || topics.length === 0) {
+                console.warn("No default topics found in bundle.");
+                return;
+            }
+
+            console.log(`Loading ${topics.length} topics...`);
             topics.forEach((topic, index) => {
                 const isLast = (index === topics.length - 1);
                 addOrUpdateTask(topic.topic || topic.name, topic.words, false, true, !isLast);
             });
+            console.log("Topics loaded successfully.");
         } catch (error) {
             console.error("Local load failed:", error);
         }
@@ -229,7 +242,12 @@ export default function Home() {
         if (target) target.style.display = (viewName === 'dashboard' || viewName === 'topics' || viewName === 'stats' || viewName === 'learn' ? 'flex' : 'block');
         if (viewName === 'dashboard') renderDashboard(state.dashboardPage);
         if (viewName === 'topics') renderTopics(state.topicsPage);
-        if (viewName === 'stats') renderStats();
+        if (viewName === 'stats') {
+            renderStats();
+            const my = document.getElementById('calendar-month-year');
+            const months = ["Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", "Tháng 5", "Tháng 6", "Tháng 7", "Tháng 8", "Tháng 9", "Tháng 10", "Tháng 11", "Tháng 12"];
+            if (my) my.innerText = `${months[statsState.currentMonth]} ${statsState.currentYear}`;
+        }
     }
 
     function startMode(mode) {
@@ -538,8 +556,11 @@ export default function Home() {
 
         <div className="task-list" id="task-list"></div>
 
-        <div style={{padding: '16px', borderTop: '1px solid var(--border)'}}>
-            <button className="btn btn-secondary" style={{width:'100%'}} onClick={() => window.exportData()}>Export Data</button>
+        <div style={{padding: '16px', borderTop: '1px solid var(--border)', display: 'flex', gap: '8px'}}>
+            <button className="btn btn-secondary" style={{flex:1}} onClick={() => window.exportData()}>Export Data</button>
+            <button className="btn btn-danger btn-ghost" title="Reset Cache" onClick={() => { if(confirm("Dọn dẹp và nạp lại kho đề?")) { localStorage.removeItem(STORAGE_KEY); location.reload(); } }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            </button>
         </div>
       </aside>
       <div className="sidebar-overlay" onClick={() => document.getElementById('sidebar').classList.remove('active')}></div>

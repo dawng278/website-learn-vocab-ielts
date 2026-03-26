@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import clientPromise from '../../../lib/mongodb';
-import fs from 'fs';
-import path from 'path';
+import topicsData from '../../../all_topics.json';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,23 +29,19 @@ export async function GET() {
     console.error('⚠️ MongoDB Fetch Failed, falling back to local file:', error.message);
   }
 
-  // 2. Fallback to local all_topics.json if MongoDB is empty or fails
+  // 2. Fallback to bundled topicsData if MongoDB is empty or fails
   if (topics.length === 0) {
     try {
-        const filePath = path.join(process.cwd(), 'all_topics.json');
-        if (fs.existsSync(filePath)) {
-            const fileContent = fs.readFileSync(filePath, 'utf8');
-            const localData = JSON.parse(fileContent);
-            topics = localData.map(item => ({
-                name: item.topic,
-                words: item.words,
-                isSystem: true,
-                filename: item.filename
-            }));
-            source = 'local_file';
-        }
+        const localData = Array.isArray(topicsData) ? topicsData : (topicsData.default || []);
+        topics = localData.map(item => ({
+            name: item.topic || item.name,
+            words: item.words,
+            isSystem: true,
+            filename: item.filename
+        }));
+        source = 'bundled_json';
     } catch (err) {
-        console.error('❌ Local file fallback failed:', err.message);
+        console.error('❌ JSON fallback failed:', err.message);
     }
   }
 
