@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import clientPromise from '../../../lib/db';
+import dbConnect from '../../../lib/db';
 import topicsData from '../../../all_topics.json';
 
 export const dynamic = 'force-dynamic';
@@ -11,7 +11,7 @@ export async function GET() {
   try {
     // 1. Try to fetch from MongoDB
     if (process.env.NEXT_PHASE !== 'phase-production-build') {
-        const client = await clientPromise;
+        const client = await dbConnect();
         const db = client.db();
         const result = await db.collection('vocab').find({}).toArray();
         
